@@ -1,4 +1,8 @@
+use std::io::Read;
+use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::net::TcpListener;
+use crate::http::Request;
 
 pub struct Server {
         addr: String,
@@ -27,21 +31,32 @@ impl Server{
 
                 // match code will no compile unless all variants are covered
                 // ok and error 
-                match listener.accept(){
+                match listener.accept() {
                     //tuple for TCPlistener and SocketAddr
-                    Ok(tup) => {
-                        let a = 5;
-                        println!("coooool");
-                    },
+                    //bytes from client - read method on TCP listener
+                    Ok((mut stream, _)) => {
+                        // read accepts an array [u8]
+                        // 1024 bytes
+                        let mut buffer = [0; 1024];
+                        match stream.read(&mut buffer) {
+                            Ok(_) => {
+                                //utf8 lossy accepts buffer with bytes and converts to a string
+                                // even invalid characters.
+                                println!("Recieved a request: {}", String::from_utf8_lossy(&buffer));
+
+                                match Request::try_from(&buffer[..]) {
+                                    Ok(request) => {},
+                                    Err(e) => println!("failed to parse request: {}", e)
+                                }
+                                let res: &Result<Request, > &buffer[..].try_into();
+
+                            }
+                            Err(e) => println!("Failed to read from connection: {}", e),
+                        }
+                    }
                     Err(e) => println!("oh, nooo {}", e);
                 }
-                //let res = listener.accept(); 
 
-                if res.is_err() {
-                    continue;
-                } 
-
-                let (stream, addr) = res.unwrap();
             }
         } 
     }
