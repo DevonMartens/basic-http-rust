@@ -1,9 +1,11 @@
 // use super::method::Method; // use the method module in the parent module
-use super::method::Method; // use the method module in the parent module
+use super::method::{MethodError, Method}; // use the method module in the parent module
 use std::convert::TryFrom; // Simple and safe type conversions that may fail in a controlled way under some circumstances.
 // https://doc.rust-lang.org/std/convert/trait.TryFrom.html
-use std::error::Error;
+//use std::error::Error;
 use std:: fmt::{Debug, Display, Formatter, Result as FmtResult};
+use std::str;
+use std::str::Utf8Error;
 
 /* Request struct
 - The path in an HTTP request is the portion of the URL that follows the domain name and specifies the location of the resource or endpoint on the server that the client wants to access.
@@ -31,72 +33,82 @@ impl TryFrom<&[u8]> for Request {
 
     fn try_from(buf: &[u8]) -> Result<Self, Self::Error> {
         let request = str::from_utf8(buf)?
-        // get_next_word(request) => {
-        //     Some((method, request)) => {}
-        //     None => return Err(ParseError::In)
-        // }
+   
         let (method, request) = get_next_word(request).ok_or(ParseError::InvalidRequest)?;
         let (path, request) = get_next_word(request).ok_or(ParseError::InvalidRequest)?;
         let (protocol, _) = get_next_word(request).ok_or(ParseError::InvalidRequest)?;
-        // //     Ok(request) => {}
-        //     Err(_) => Err(ParseError::InvalidEncoding),
-        // }
+      
+   
+
         if protocol != "HTTP/1.1" {
             return Err(ParseError::InvalidProtocol);
+        }
+        // override method 
+        let method: Method = method.parse()?;
+
+        //define query string
+        let mut query_string = None;
+        // find method for string slice
+        // returns an option
+        if let Some(i) = path.find('?'){
+            query_string = Some(&path[i + 1..]);
+                //reassign path to be everything before ?
+            path = &path[..i];
+
         }
         unimplemented!()
     }
 }
 
-fn get_next_word(request: &str) -> Option<(&str, &str)>{
+fn get_next_word(request: &str) -> Option<(&str, &str)> {
     for (i, c) in request.chars().enumerate() {
-        // spaces and new lines start new words
         if c == ' ' || c == '\r' {
-            return Some((&request[..i], &request[..i]));
+            // to get the rest of the string we add 1 to the index of what we've returned
+            return Some((&request[..i], &request[i + 1..]));
         }
     }
+
     None
 }
 
-impl From<UTF8cError> for ParseError {
+pub enum ParseError {
+    InvalidRequest,
+    InvalidEncoding,
+    InvalidProtocol,
+    InvalidMethod,
+}
+
+impl ParseError {
+    fn message(&self) -> &str {
+        match self {
+            Self::InvalidRequest => "Invalid Request",
+            Self::InvalidEncoding => "Invalid Encoding",
+            Self::InvalidProtocol => "Invalid Protocol",
+            Self::InvalidMethod => "Invalid Method",
+        }
+    }
+}
+
+impl From<MethodError> for ParseError {
+    fn from(_: MethodError) -> Self {
+        Self::InvalidMethod
+    }
+}
+
+impl From<Utf8Error> for ParseError {
     fn from(_: Utf8Error) -> Self {
         Self::InvalidEncoding
     }
 }
 
-impl Display for ParseError{
-    fn fmt(&self, f: &mut Formatter) -> FmtResult{
-        write!(f. "{}", self/message())
-     }
+impl Display for ParseError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "{}", self.message())
+    }
 }
 
 impl Debug for ParseError {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult{
-        write!(f. "{}", self/message())
-     }
-}
-
-pub enum ParseError{
-    InvalidRequest,
-    InvalidEncoding
-    InvalidProtocol,
-    InvalidMethod,
-}
-
-impl enum ParseError {
-    fn message(&self) -> &str{
-        match self {
-            Self::InvalidRequest => "Invalid Request",
-            Self::InvalidEncoding =>"Invalid Encoding"
-            Self::InvalidProtocol =>"Invalid Protocol",
-            Self::InvalidMethod =>"Invalid Method",
-        }
-    }
-
-}
-
-impl Error for ParseError {
-    fn fmt(&self, f: &mut Formatter) -. FmtResult {
-        write!(f, "")
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "{}", self.message())
     }
 }
