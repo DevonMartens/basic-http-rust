@@ -2,7 +2,7 @@
 use super::method::{Method, MethodError}; // Import Method and MethodError from a parent module.
 use crate::http::query_string::QueryString; // Import QueryString from a parent module.
 use std::convert::TryFrom; // Import TryFrom trait for type conversion.
-//use std::error::Error; // Import Error trait for error handling.
+use std::error::Error; // Import Error trait for error handling.
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult}; // Import formatting traits and types.
 use std::str; // Import string handling utilities.
 use std::str::Utf8Error; // Import Utf8Error for handling UTF-8 encoding errors.
@@ -131,3 +131,4 @@ impl Debug for ParseError {
    
 }
 }
+impl Error for ParseError {}
