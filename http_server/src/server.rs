@@ -46,6 +46,8 @@ impl Server {
                             match Request::try_from(&buffer[..]) {
                                 // If parsing is successful
                                 Ok(request) => {
+                                  //  buffer[1] = 0;
+                                  //  let a = request;
                                     // Handle the request here (logic to be implemented)
                                 },
                                 // If parsing fails
