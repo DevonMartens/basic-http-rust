@@ -1,64 +1,72 @@
-// Standard library imports
-use std::io::Read; // For reading from the TCP stream
-use std::net::TcpListener; // To listen for TCP connections
-use crate::http::Request; // Importing the Request struct from your own `http` module
+// Import necessary modules and structs from the `crate::http` module and standard library.
+use crate::http::{ParseError, Request, Response, StatusCode};
+use std::convert::TryFrom;
+use std::io::Read;
+use std::net::TcpListener;
 
-// Definition of the Server struct
-pub struct Server {
-    addr: String, // The address where the server will listen
+// Define a `Handler` trait with methods for handling requests and bad requests.
+pub trait Handler {
+    // Method to handle a valid HTTP request.
+    // It takes a reference to a `Request` and returns a `Response`.
+    fn handle_request(&mut self, request: &Request) -> Response;
+
+    // Default implementation for handling bad requests.
+    // It takes a reference to a `ParseError` and logs the error, then returns a 400 Bad Request response.
+    fn handle_bad_request(&mut self, e: &ParseError) -> Response {
+        println!("Failed to parse request: {}", e);
+        Response::new(StatusCode::BadRequest, None)
+    }
 }
 
-// Implementation block for the Server struct
+// Define a `Server` struct to represent an HTTP server.
+pub struct Server {
+    addr: String, // The address on which the server will listen.
+}
+
+// Implement methods for the `Server` struct.
 impl Server {
-    // Constructor function for Server
-    // Takes a String address and returns a new Server instance
-    pub fn new(addr: String) -> Server {
-        Server { addr }
+    // Constructor for `Server`. It takes a `String` representing the address and returns a new `Server`.
+    pub fn new(addr: String) -> Self {
+        Self { addr }
     }
 
-    // Function to start the server
-    // &self indicates that this function borrows the Server instance immutably
-    pub fn run(&self) {
+    // Method to run the server.
+    // It takes a mutable `Handler` trait object which handles incoming requests.
+    pub fn run(self, mut handler: impl Handler) {
         println!("Listening on {}", self.addr);
 
-        // Binding the server to the specified address
-        // unwrap_or_else is used to handle potential errors during binding
-        let listener = TcpListener::bind(&self.addr).unwrap_or_else(|error| {
-            panic!("Failed to bind to address: {}", error);
-        });
+        // Bind the TCP listener to the specified address. Unwrap is used, which will panic if binding fails.
+        let listener = TcpListener::bind(&self.addr).unwrap();
 
-        // Infinite loop to keep the server running
+        // Enter an infinite loop to listen for incoming connections.
         loop {
-            // Accepting incoming connections and handling them
             match listener.accept() {
-                // If a connection is successfully established
+                // Handle the case where a new connection is successfully established.
                 Ok((mut stream, _)) => {
-                    let mut buffer = [0; 1024]; // A buffer to store incoming data, 1024 bytes in size
+                    let mut buffer = [0; 1024]; // Create a buffer to read the request into.
 
-                    // Reading data from the stream into the buffer
                     match stream.read(&mut buffer) {
-                        // If the read operation is successful
+                        // If reading from the stream is successful...
                         Ok(_) => {
-                            // Logging the incoming request data, converting buffer to a UTF-8 string
+                            // Log the received request for debugging purposes.
                             println!("Received a request: {}", String::from_utf8_lossy(&buffer));
-                            
-                            // Attempt to parse the request using the Request::try_from implementation
-                            match Request::try_from(&buffer[..]) {
-                                // If parsing is successful
-                                Ok(request) => {
-                                  //  buffer[1] = 0;
-                                  //  let a = request;
-                                    // Handle the request here (logic to be implemented)
-                                },
-                                // If parsing fails
-                                Err(e) => println!("Failed to parse request: {}", e),
+
+                            // Try to parse the request. If successful, handle the request; otherwise, handle the bad request.
+                            let response = match Request::try_from(&buffer[..]) {
+                                Ok(request) => handler.handle_request(&request),
+                                Err(e) => handler.handle_bad_request(&e),
+                            };
+
+                            // Attempt to send the response back. Log an error if sending fails.
+                            if let Err(e) = response.send(&mut stream) {
+                                println!("Failed to send response: {}", e);
                             }
                         }
-                        // If there's an error in reading from the stream
+                        // Log an error if reading from the stream fails.
                         Err(e) => println!("Failed to read from connection: {}", e),
                     }
                 }
-                // If there's an error in accepting the connection
+                // Log an error if accepting a new connection fails.
                 Err(e) => println!("Failed to establish a connection: {}", e),
             }
         }
