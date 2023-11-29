@@ -1,69 +1,80 @@
-// use super::method::Method; // use the method module in the parent module
-use super::method::{MethodError, Method}; // use the method module in the parent module
-use std::convert::TryFrom; // Simple and safe type conversions that may fail in a controlled way under some circumstances.
-// https://doc.rust-lang.org/std/convert/trait.TryFrom.html
-//use std::error::Error;
-use std:: fmt::{Debug, Display, Formatter, Result as FmtResult};
-use std::str;
-use std::str::Utf8Error;
+// Import necessary modules and traits from the standard library and other places.
+use super::method::{Method, MethodError}; // Import Method and MethodError from a parent module.
+use crate::http::query_string::QueryString; // Import QueryString from a parent module.
+use std::convert::TryFrom; // Import TryFrom trait for type conversion.
+//use std::error::Error; // Import Error trait for error handling.
+use std::fmt::{Debug, Display, Formatter, Result as FmtResult}; // Import formatting traits and types.
+use std::str; // Import string handling utilities.
+use std::str::Utf8Error; // Import Utf8Error for handling UTF-8 encoding errors.
 
-/* Request struct
-- The path in an HTTP request is the portion of the URL that follows the domain name and specifies the location of the resource or endpoint on the server that the client wants to access.
-- query string in an HTTP request is a part of the URL that contains data in key-value pairs, typically used to send parameters or additional information to a server for processing.
-- Method - enum one of 9 methods see: Request_Type.md
-*/
+// GET search?name=abc&sort=1 HTTP/1.1\r\r...HEADERS...
 
-// model request: GET /user?id=10 HTTP/1.1\r\n HEADERS BODY \r\n
-
-pub struct Request {
-    path: String,
-    query_string: Option<String> , // it is possible to not have we create an option enum 
+// Define a Request struct which holds references to parts of a string buffer.
+#[derive(Debug)]
+pub struct Request<'buf> {
+    path: &'buf str,
+    query_string: Option<QueryString<'buf>>,
     method: Method,
 }
 
-impl Request {
-    fn from_byte_array(buf: &[u8]) -> Result<Self, String> {}
-}
+// Implementation block for Request.
+impl<'buf> Request<'buf> {
+    // Getter method for the path.
+    pub fn path(&self) -> &str {
+        &self.path
+    }
 
-// using try from for cases when it does not return a request option from the enum
-// because try from is a returns a result
-// conversion might fail.
-impl TryFrom<&[u8]> for Request { 
-    type Error = ParseError;
+    // Getter method for the method.
+    pub fn method(&self) -> &Method {
+        &self.method
+    }
 
-    fn try_from(buf: &[u8]) -> Result<Self, Self::Error> {
-        let request = str::from_utf8(buf)?
-   
-        let (method, request) = get_next_word(request).ok_or(ParseError::InvalidRequest)?;
-        let (path, request) = get_next_word(request).ok_or(ParseError::InvalidRequest)?;
-        let (protocol, _) = get_next_word(request).ok_or(ParseError::InvalidRequest)?;
-      
-   
-
-        if protocol != "HTTP/1.1" {
-            return Err(ParseError::InvalidProtocol);
-        }
-        // override method 
-        let method: Method = method.parse()?;
-
-        //define query string
-        let mut query_string = None;
-        // find method for string slice
-        // returns an option
-        if let Some(i) = path.find('?'){
-            query_string = Some(&path[i + 1..]);
-                //reassign path to be everything before ?
-            path = &path[..i];
-
-        }
-        unimplemented!()
+    // Getter method for the query_string.
+    pub fn query_string(&self) -> Option<&QueryString> {
+        self.query_string.as_ref()
     }
 }
 
+// Implement the TryFrom trait for Request to convert from a byte slice.
+impl<'buf> TryFrom<&'buf [u8]> for Request<'buf> {
+    type Error = ParseError;
+
+    // Main function to try converting a byte slice to a Request.
+    fn try_from(buf: &'buf [u8]) -> Result<Request<'buf>, Self::Error> {
+        let request = str::from_utf8(buf)?; // Convert buffer to string slice, handling potential UTF-8 errors.
+
+        // Parse the HTTP method, path, and protocol.
+        let (method, request) = get_next_word(request).ok_or(ParseError::InvalidRequest)?;
+        let (mut path, request) = get_next_word(request).ok_or(ParseError::InvalidRequest)?;
+        let (protocol, _) = get_next_word(request).ok_or(ParseError::InvalidRequest)?;
+
+        // Validate the protocol.
+        if protocol != "HTTP/1.1" {
+            return Err(ParseError::InvalidProtocol);
+        }
+
+        let method: Method = method.parse()?; // Parse the method, handling potential method parsing errors.
+
+        // Parse query string if present.
+        let mut query_string = None;
+        if let Some(i) = path.find('?') {
+            query_string = Some(QueryString::from(&path[i + 1..]));
+            path = &path[..i];
+        }
+
+        // Construct and return the Request object.
+        Ok(Self {
+            path,
+            query_string,
+            method,
+        })
+    }
+}
+
+// Function to get the next word (or token) in a request string.
 fn get_next_word(request: &str) -> Option<(&str, &str)> {
     for (i, c) in request.chars().enumerate() {
         if c == ' ' || c == '\r' {
-            // to get the rest of the string we add 1 to the index of what we've returned
             return Some((&request[..i], &request[i + 1..]));
         }
     }
@@ -71,6 +82,7 @@ fn get_next_word(request: &str) -> Option<(&str, &str)> {
     None
 }
 
+// Define an enumeration for different types of parsing errors.
 pub enum ParseError {
     InvalidRequest,
     InvalidEncoding,
@@ -78,7 +90,9 @@ pub enum ParseError {
     InvalidMethod,
 }
 
+// Implementations for ParseError.
 impl ParseError {
+    // Method to get a human-readable message for each error type.
     fn message(&self) -> &str {
         match self {
             Self::InvalidRequest => "Invalid Request",
@@ -89,26 +103,31 @@ impl ParseError {
     }
 }
 
+// Implement conversion from MethodError to ParseError.
 impl From<MethodError> for ParseError {
     fn from(_: MethodError) -> Self {
         Self::InvalidMethod
     }
 }
 
+// Implement conversion from Utf8Error to ParseError.
 impl From<Utf8Error> for ParseError {
     fn from(_: Utf8Error) -> Self {
         Self::InvalidEncoding
     }
 }
 
+// Implement Display trait for ParseError for better error messages.
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         write!(f, "{}", self.message())
     }
 }
 
+// Implement Debug trait for ParseError to enable debugging capabilities.
 impl Debug for ParseError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         write!(f, "{}", self.message())
-    }
+   
+}
 }

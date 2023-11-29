@@ -1,5 +1,7 @@
 use std::str::FromStr;
 // Remember 9 methods in Request_Type.md
+
+#[derive(Debug)]
 pub enum Method {
     GET,
     DELETE,
